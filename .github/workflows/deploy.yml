@@ -7,6 +7,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      WRANGLER_SEND_METRICS: "false"
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -22,10 +24,12 @@ jobs:
       - name: Inject users config
         env:
           KV_NAMESPACE_ID: ${{ vars.KV_NAMESPACE_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           LX_USER_ADMIN: ${{ secrets.LX_USER_ADMIN }}
           # 新增用户时在此追加一行：LX_USER_xxx: ${{ secrets.LX_USER_xxx }}
         run: |
           sed -i "s/KV_NAMESPACE_ID_PLACEHOLDER/${{ vars.KV_NAMESPACE_ID }}/g" wrangler.toml
+          sed -i "s/CLOUDFLARE_ACCOUNT_ID_PLACEHOLDER/${CLOUDFLARE_ACCOUNT_ID}/" wrangler.toml
           python3 - <<'EOF'
           import os, json
 
