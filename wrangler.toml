@@ -14,7 +14,7 @@ id = "KV_NAMESPACE_ID_PLACEHOLDER"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["UserSyncDO"]
+new_sqlite_classes = ["UserSyncDO"]
 
 [vars]
 LX_USERS = "LX_USERS_PLACEHOLDER"
