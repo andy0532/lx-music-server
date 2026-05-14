@@ -8,10 +8,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Install pnpm
         run: npm install -g pnpm
@@ -21,11 +21,11 @@ jobs:
 
       - name: Inject users config
         env:
-          KV_NAMESPACE_ID: ${{ secrets.KV_NAMESPACE_ID }}
+          KV_NAMESPACE_ID: ${{ vars.KV_NAMESPACE_ID }}
           LX_USER_ADMIN: ${{ secrets.LX_USER_ADMIN }}
           # 新增用户时在此追加一行：LX_USER_xxx: ${{ secrets.LX_USER_xxx }}
         run: |
-          sed -i "s/KV_NAMESPACE_ID_PLACEHOLDER/${{ secrets.KV_NAMESPACE_ID }}/g" wrangler.toml
+          sed -i "s/KV_NAMESPACE_ID_PLACEHOLDER/${{ vars.KV_NAMESPACE_ID }}/g" wrangler.toml
           python3 - <<'EOF'
           import os, json
 
