@@ -16,65 +16,112 @@ A Cloudflare Workers port of [lx-music-sync-server](https://github.com/lyswhut/l
 ## Prerequisites
 
 - A Cloudflare account (free plan is sufficient)
-- A KV Namespace already created
-- A GitHub repository (for Actions-based deployment)
+- A GitHub account (for forking the repo and Actions-based deployment)
 
 ## Deployment
 
-### 1. Fork and configure Secrets
+### 1. Create a Cloudflare KV Namespace
 
-Fork this repository, then go to **Settings → Secrets and variables → Actions** in your GitHub repository and add the following Secrets:
+1. Log in to the [Cloudflare Dashboard](https://dash.cloudflare.com/)
+2. Go to **Workers & Pages → KV**
+3. Click **Create a namespace**
+4. Enter a name (e.g. `lx-music-kv`) and click **Add**
+5. After creation, click into the namespace — you'll see the **Namespace ID** on the details page. Copy it for later
+
+### 2. Create a Cloudflare API Token
+
+1. Log in to the [Cloudflare Dashboard](https://dash.cloudflare.com/)
+2. Go to **My Profile → API Tokens** (or visit https://dash.cloudflare.com/profile/api-tokens)
+3. Click **Create Token**
+4. Select the **Edit Cloudflare Workers** template and click **Use template**
+5. Confirm the permissions include:
+   - Account / Workers Scripts / Edit
+   - Account / Workers KV Storage / Edit
+   - Account / Durable Objects / Edit
+6. (Optional) Restrict Account Resources to a specific account
+7. Click **Continue to summary** → **Create Token**
+8. Copy the generated token (it is shown only once — save it securely)
+
+### 3. Fork and configure
+
+Fork this repository, then go to **Settings → Secrets and variables → Actions** in your GitHub repository and add the following:
+
+**Secrets (sensitive data):**
 
 | Secret | Description |
 |---|---|
-| `CLOUDFLARE_API_TOKEN` | Cloudflare API Token with Workers and KV read/write permissions |
-| `KV_NAMESPACE_ID` | The ID of your existing KV Namespace |
-| `LX_USER_ADMIN` | Password for the `admin` user (see user configuration below) |
+| `CLOUDFLARE_API_TOKEN` | The API Token created in step 2 |
+| `LX_USERS` | User configuration list (see user configuration below) |
 
-### 2. Configure users
+**Variables (non-sensitive config):**
 
-Each GitHub Secret named `LX_USER_<username>` defines one sync user. Usernames are automatically lowercased.
+| Variable | Description |
+|---|---|
+| `KV_NAMESPACE_ID` | The KV Namespace ID from step 1 |
 
-**Secret value formats:**
+### 4. Configure users
+
+Configure all users in the GitHub Secret `LX_USERS`. Two formats are supported:
+
+**Simple format** (username:password, comma-separated):
 
 ```
-# Password only (simplest)
-your_password
+admin:<USER_NAME>,alice:her_password
+```
 
-# JSON format (supports additional options)
-{"password": "your_password", "maxSnapshotNum": 20}
+**JSON format** (supports additional options):
+
+```json
+[{"name":"admin","password":"your_password"},{"name":"alice","password":"her_password","maxSnapshotNum":30}]
 ```
 
 **Supported user options:**
 
 | Option | Type | Description |
 |---|---|---|
+| `name` | string | Username (required) |
 | `password` | string | Login password (required) |
 | `maxSnapshotNum` | number | Maximum number of snapshots to retain, default 20 |
 | `list.addMusicLocationType` | `"top"` \| `"bottom"` | Where new songs are added, default `"bottom"` |
 
-**Adding multiple users:**
+> To add or modify users, simply update the `LX_USERS` Secret — no code or deployment file changes needed.
 
-Append a line to the `env` block of the `Inject users config` step in `.github/workflows/deploy.yml`:
+### 5. Trigger deployment
 
-```yaml
-env:
-  LX_USER_ADMIN: ${{ secrets.LX_USER_ADMIN }}
-  LX_USER_BOB: ${{ secrets.LX_USER_BOB }}   # new user
+Manually trigger a deployment from **Actions → Deploy to Cloudflare Workers → Run workflow** in your GitHub repository (after modifying Secrets, you need to manually trigger a deployment).
+
+## Access URL
+
+After deployment, the Worker is accessible via its default Workers domain, or you can bind a custom domain.
+
+### Using the default Workers domain
+
+The default URL is:
+
+```
+https://lx-music-server.<your-subdomain>.workers.dev
 ```
 
-Then add the corresponding `LX_USER_BOB` Secret in GitHub.
+You can also find it in the Cloudflare Dashboard under **Workers & Pages → lx-music-server**.
 
-### 3. Trigger deployment
+### Using a custom domain (optional)
 
-Push to the `main` branch — GitHub Actions will inject the configuration and deploy to Cloudflare Workers automatically.
+1. Add your domain to Cloudflare (**Websites → Add a site**) and follow the prompts to update your domain's NS records to point to Cloudflare
+2. In the Cloudflare Dashboard, go to **Workers & Pages → lx-music-server**
+3. Click **Settings → Domains & Routes → Add → Custom Domain**
+4. Enter the subdomain you want to use (e.g. `sync.example.com`) and click **Add domain**
+5. Cloudflare will automatically create the DNS record and issue an SSL certificate — wait for it to take effect
 
-### Manual deployment
+Once configured, you can access the service at `https://sync.example.com`.
 
-```bash
-pnpm install
-pnpm deploy
-```
+> **Important:** Before switching to a different sync server, make sure to back up your local data to prevent data loss.
+
+## Client Configuration
+
+In LX Music's sync settings:
+
+- **Server URL**: `https://<your-worker-name>.<your-subdomain>.workers.dev` (or your custom domain)
+- **Password**: the corresponding password
 
 ## Local Development
 
@@ -85,13 +132,14 @@ pnpm dev
 
 > `wrangler dev` simulates Durable Objects and KV locally.
 
-## Client Configuration
+### Manual deployment (optional)
 
-In LX Music's sync settings:
+To deploy to Cloudflare Workers from your local machine:
 
-- **Server URL**: `https://<your-worker-name>.<your-subdomain>.workers.dev`
-- **Username**: the username part of `LX_USER_<username>` (lowercase)
-- **Password**: the corresponding Secret value
+```bash
+pnpm install
+pnpm deploy
+```
 
 ## Device Management API
 
@@ -114,8 +162,8 @@ curl -u <username>:<password> -X DELETE https://<worker-url>/devices/<clientId>
 ```
 Client
   │
-  ├─ POST /ah              Authentication (new device / re-auth)
-  ├─ GET  /sync            WebSocket upgrade → UserSyncDO
+  ├─ GET  /ah              Authentication (new device / re-auth)
+  ├─ GET  /socket          WebSocket upgrade → UserSyncDO
   ├─ GET  /devices         List devices (Basic Auth)
   ├─ DELETE /devices/:id   Revoke device (Basic Auth)
   ├─ GET  /hello           Connectivity check

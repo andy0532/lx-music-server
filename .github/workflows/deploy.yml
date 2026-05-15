@@ -3,6 +3,7 @@ name: Deploy to Cloudflare Workers
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -24,24 +25,30 @@ jobs:
       - name: Inject users config
         env:
           KV_NAMESPACE_ID: ${{ vars.KV_NAMESPACE_ID }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          LX_USER_ADMIN: ${{ secrets.LX_USER_ADMIN }}
-          # 新增用户时在此追加一行：LX_USER_xxx: ${{ secrets.LX_USER_xxx }}
+          LX_USERS: ${{ secrets.LX_USERS }}
         run: |
           sed -i "s/KV_NAMESPACE_ID_PLACEHOLDER/${{ vars.KV_NAMESPACE_ID }}/g" wrangler.toml
-          sed -i "s/CLOUDFLARE_ACCOUNT_ID_PLACEHOLDER/${CLOUDFLARE_ACCOUNT_ID}/" wrangler.toml
+
+          # LX_USERS secret 格式:
+          #   简单模式: user1:password1,user2:password2
+          #   JSON 模式: [{"name":"user1","password":"xxx"},{"name":"user2","password":"yyy","maxSnapshotNum":30}]
           python3 - <<'EOF'
           import os, json
 
-          users = []
-          for k, v in os.environ.items():
-              if not k.startswith('LX_USER_') or not v:
-                  continue
-              name = k.removeprefix('LX_USER_').lower()
-              try:
-                  users.append({"name": name, **json.loads(v)})
-              except json.JSONDecodeError:
-                  users.append({"name": name, "password": v})
+          raw = os.environ.get("LX_USERS", "")
+          if not raw:
+              users = []
+          elif raw.startswith("["):
+              users = json.loads(raw)
+          else:
+              # user:password,user:password 格式
+              users = []
+              for pair in raw.split(","):
+                  pair = pair.strip()
+                  if not pair:
+                      continue
+                  parts = pair.split(":", 1)
+                  users.append({"name": parts[0], "password": parts[1] if len(parts) > 1 else ""})
 
           users_json = json.dumps(users)
 

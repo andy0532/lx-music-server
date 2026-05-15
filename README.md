@@ -16,65 +16,112 @@
 ## 前置要求
 
 - Cloudflare 账号（免费计划即可）
-- 已创建 KV Namespace
-- GitHub 仓库（用于 Actions 自动部署）
+- GitHub 账号（用于 Fork 仓库和 Actions 自动部署）
 
 ## 部署方式
 
-### 1. Fork 并配置 Secrets
+### 1. 创建 Cloudflare KV Namespace
 
-Fork 本仓库，在 GitHub 仓库的 **Settings → Secrets and variables → Actions** 中添加以下 Secrets：
+1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)
+2. 进入 **Workers & Pages → KV**
+3. 点击 **Create a namespace**
+4. 输入名称（如 `lx-music-kv`），点击 **Add**
+5. 创建完成后，点击进入该 Namespace，在详情页可看到 **Namespace ID**，复制备用
+
+### 2. 创建 Cloudflare API Token
+
+1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)
+2. 进入 **My Profile → API Tokens**（或直接访问 https://dash.cloudflare.com/profile/api-tokens）
+3. 点击 **Create Token**
+4. 选择 **Edit Cloudflare Workers** 模板，点击 **Use template**
+5. 确认权限包含：
+   - Account / Workers Scripts / Edit
+   - Account / Workers KV Storage / Edit
+   - Account / Durable Objects / Edit
+6. （可选）在 Account Resources 中限制为特定账户
+7. 点击 **Continue to summary** → **Create Token**
+8. 复制生成的 Token（仅显示一次，请妥善保存）
+
+### 3. Fork 并配置
+
+Fork 本仓库，在 GitHub 仓库的 **Settings → Secrets and variables → Actions** 中添加以下配置：
+
+**Secrets（敏感信息）：**
 
 | Secret 名称 | 说明 |
 |---|---|
-| `CLOUDFLARE_API_TOKEN` | Cloudflare API Token，需要 Workers 和 KV 的读写权限 |
-| `KV_NAMESPACE_ID` | 已创建的 KV Namespace ID |
-| `LX_USER_ADMIN` | 用户 `admin` 的密码（见下方用户配置说明） |
+| `CLOUDFLARE_API_TOKEN` | 上一步创建的 API Token |
+| `LX_USERS` | 用户配置列表（见下方用户配置说明） |
 
-### 2. 配置用户
+**Variables（非敏感配置）：**
 
-每个 Cloudflare Workers Secret 对应一个同步用户，命名规则为 `LX_USER_<用户名>`（用户名自动转为小写）。
+| Variable 名称 | 说明 |
+|---|---|
+| `KV_NAMESPACE_ID` | 第 1 步中创建的 KV Namespace ID |
 
-**Secret 值格式：**
+### 4. 配置用户
+
+在 GitHub Secret `LX_USERS` 中配置所有用户，支持两种格式：
+
+**简单格式**（用户名:密码，逗号分隔）：
 
 ```
-# 仅密码（最简单）
-your_password
+admin:your_password,alice:her_password
+```
 
-# JSON 格式（支持更多选项）
-{"password": "your_password", "maxSnapshotNum": 20}
+**JSON 格式**（支持更多选项）：
+
+```json
+[{"name":"admin","password":"your_password"},{"name":"alice","password":"her_password","maxSnapshotNum":30}]
 ```
 
 **支持的用户选项：**
 
 | 选项 | 类型 | 说明 |
 |---|---|---|
+| `name` | string | 用户名（必填） |
 | `password` | string | 登录密码（必填） |
 | `maxSnapshotNum` | number | 最大快照保留数量，默认 20 |
 | `list.addMusicLocationType` | `"top"` \| `"bottom"` | 歌曲添加位置，默认 `"bottom"` |
 
-**添加多用户：**
+> 添加或修改用户只需更新 `LX_USERS` 这一个 Secret，无需修改代码或部署文件。
 
-在 `.github/workflows/deploy.yml` 的 `Inject users config` 步骤中追加对应行：
+### 5. 触发部署
 
-```yaml
-env:
-  LX_USER_ADMIN: ${{ secrets.LX_USER_ADMIN }}
-  LX_USER_BOB: ${{ secrets.LX_USER_BOB }}   # 新增用户
+在 GitHub 仓库的 **Actions → Deploy to Cloudflare Workers → Run workflow** 手动触发部署（修改 Secret 后需要手动触发部署）。
+
+## 访问地址
+
+部署成功后，默认使用 Workers 域名访问，也可绑定自定义域名。
+
+### 使用 Workers 默认域名
+
+Worker 的默认访问地址为：
+
+```
+https://lx-music-server.<your-subdomain>.workers.dev
 ```
 
-同时在 GitHub Secrets 中添加 `LX_USER_BOB`。
+也可在 Cloudflare Dashboard 的 **Workers & Pages → lx-music-server** 页面查看。
 
-### 3. 触发部署
+### 使用自定义域名（可选）
 
-推送代码到 `main` 分支，GitHub Actions 会自动完成注入配置并部署到 Cloudflare Workers。
+1. 将你的域名添加到 Cloudflare（**Websites → Add a site**），并按提示修改域名的 NS 记录指向 Cloudflare
+2. 在 Cloudflare Dashboard 进入 **Workers & Pages → lx-music-server**
+3. 点击 **Settings → Domains & Routes → Add → Custom Domain**
+4. 输入你想使用的子域名（如 `sync.example.com`），点击 **Add domain**
+5. Cloudflare 会自动创建 DNS 记录并签发 SSL 证书，等待生效即可
 
-### 手动部署
+绑定成功后，即可通过 `https://sync.example.com` 访问。
 
-```bash
-pnpm install
-pnpm deploy
-```
+> **注意：** 更换同步服务器前，请务必做好本地数据备份，以防数据丢失。
+
+## 客户端配置
+
+在 LX Music 客户端的同步设置中填写：
+
+- **服务器地址**：`https://<your-worker-name>.<your-subdomain>.workers.dev`（或自定义域名）
+- **连接码**：对应的密码
 
 ## 本地开发
 
@@ -85,13 +132,14 @@ pnpm dev
 
 > 本地开发使用 `wrangler dev`，Durable Objects 和 KV 均在本地模拟运行。
 
-## 客户端配置
+### 手动部署（可选）
 
-在 LX Music 客户端的同步设置中填写：
+如需在本地部署到 Cloudflare Workers：
 
-- **服务器地址**：`https://<your-worker-name>.<your-subdomain>.workers.dev`
-- **用户名**：对应 `LX_USER_<用户名>` 中的用户名（小写）
-- **密码**：对应 Secret 的值
+```bash
+pnpm install
+pnpm deploy
+```
 
 ## 设备管理 API
 
@@ -114,8 +162,8 @@ curl -u <用户名>:<密码> -X DELETE https://<worker-url>/devices/<clientId>
 ```
 客户端
   │
-  ├─ POST /ah          认证（新设备 / 重新认证）
-  ├─ GET  /sync        WebSocket 升级 → UserSyncDO
+  ├─ GET  /ah          认证（新设备 / 重新认证）
+  ├─ GET  /socket      WebSocket 升级 → UserSyncDO
   ├─ GET  /devices     设备列表（Basic Auth）
   ├─ DELETE /devices/:id  删除设备（Basic Auth）
   ├─ GET  /hello       连通性检测
