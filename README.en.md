@@ -1,127 +1,162 @@
 # lx-music-server
 
-A Cloudflare Workers port of [lx-music-sync-server](https://github.com/lyswhut/lx-music-sync-server), using Durable Objects for stateful WebSocket sync — no self-hosted server required.
+[![Deploy](https://github.com/WorkerHub/lx-music-server/actions/workflows/deploy.yml/badge.svg)](https://github.com/WorkerHub/lx-music-server/actions/workflows/deploy.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-0b7a75.svg)](LICENSE)
+[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-f38020.svg)](https://workers.cloudflare.com/)
+[![pnpm](https://img.shields.io/badge/pnpm-11.5.0-f69220.svg)](https://pnpm.io/)
 
-[中文](./README.md)
+A Cloudflare Workers rewrite of `lx-music-sync-server`, using Durable Objects for stateful WebSocket synchronization.
 
-## Features
+Built for one goal: run multi-device sync without self-hosting servers.
 
-- Runs on Cloudflare Workers + Durable Objects — zero server maintenance
-- Multi-user isolation: each user gets a dedicated DO instance and storage
-- Real-time bidirectional WebSocket sync for playlists and dislike rules
-- Snapshot-based version management with multi-device incremental merge
-- Device management API (list / revoke authorized devices)
-- One-click deployment via GitHub Actions
+[English](README.en.md) ｜ [中文](README.md)
 
-## Prerequisites
+## Table of Contents
 
-- A Cloudflare account (free plan is sufficient)
-- A GitHub account (for forking the repo and Actions-based deployment)
+- [Why This Version](#why-this-version)
+- [5-Minute Quick Start](#5-minute-quick-start)
+- [Full Deployment Guide](#full-deployment-guide)
+- [Client Configuration](#client-configuration)
+- [Device Management API](#device-management-api)
+- [Local Development](#local-development)
+- [Architecture](#architecture)
+- [FAQ](#faq)
+- [License](#license)
 
-## Deployment
+## Why This Version
+
+- Serverless operations on Cloudflare Workers + Durable Objects
+- Strong user isolation with one DO instance per user
+- Real-time two-way sync for playlists and dislike rules
+- Snapshot-based incremental merge across multiple devices
+- Fast rollout via GitHub Actions
+
+## 5-Minute Quick Start
+
+If you just want to get it running:
+
+1. Fork this repository
+2. Create a Cloudflare KV namespace and copy `KV_NAMESPACE_ID`
+3. Create a Cloudflare API token with Edit permissions for Workers Scripts/KV/DO
+4. In your GitHub repo settings, configure:
+  - Secret: `CLOUDFLARE_API_TOKEN`
+  - Secret: `LX_USERS`
+  - Variable: `KV_NAMESPACE_ID`
+5. Run `Deploy to Cloudflare Workers` in Actions
+
+Minimal `LX_USERS` example:
+
+```text
+admin:your_password,alice:her_password
+```
+
+## Full Deployment Guide
 
 ### 1. Create a Cloudflare KV Namespace
 
-1. Log in to the [Cloudflare Dashboard](https://dash.cloudflare.com/)
-2. Go to **Workers & Pages → KV**
+1. Log in to [Cloudflare Dashboard](https://dash.cloudflare.com/)
+2. Go to **Workers & Pages -> KV**
 3. Click **Create a namespace**
-4. Enter a name (e.g. `lx-music-kv`) and click **Add**
-5. After creation, click into the namespace — you'll see the **Namespace ID** on the details page. Copy it for later
+4. Enter a name (for example, `lx-music-kv`) and create it
+5. Copy the **Namespace ID** from the namespace detail page
 
 ### 2. Create a Cloudflare API Token
 
-1. Log in to the [Cloudflare Dashboard](https://dash.cloudflare.com/)
-2. Go to **My Profile → API Tokens** (or visit https://dash.cloudflare.com/profile/api-tokens)
+1. Log in to [Cloudflare Dashboard](https://dash.cloudflare.com/)
+2. Go to **My Profile -> API Tokens** (or visit https://dash.cloudflare.com/profile/api-tokens)
 3. Click **Create Token**
-4. Select the **Edit Cloudflare Workers** template and click **Use template**
-5. Confirm the permissions include:
-   - Account / Workers Scripts / Edit
-   - Account / Workers KV Storage / Edit
-   - Account / Durable Objects / Edit
-6. (Optional) Restrict Account Resources to a specific account
-7. Click **Continue to summary** → **Create Token**
-8. Copy the generated token (it is shown only once — save it securely)
+4. Choose **Edit Cloudflare Workers** template
+5. Make sure permissions include:
+  - Account / Workers Scripts / Edit
+  - Account / Workers KV Storage / Edit
+  - Account / Durable Objects / Edit
+6. (Optional) Restrict resources to one account
+7. Create the token and save it securely (shown only once)
 
-### 3. Fork and configure
+### 3. Configure GitHub Actions in your fork
 
-Fork this repository, then go to **Settings → Secrets and variables → Actions** in your GitHub repository and add the following:
+In **Settings -> Secrets and variables -> Actions**, add:
 
-**Secrets (sensitive data):**
+Secrets:
 
-| Secret | Description |
+| Name | Description |
 |---|---|
-| `CLOUDFLARE_API_TOKEN` | The API Token created in step 2 |
-| `LX_USERS` | User configuration list (see user configuration below) |
+| `CLOUDFLARE_API_TOKEN` | API token from step 2 |
+| `LX_USERS` | User config list |
 
-**Variables (non-sensitive config):**
+Variables:
 
-| Variable | Description |
+| Name | Description |
 |---|---|
-| `KV_NAMESPACE_ID` | The KV Namespace ID from step 1 |
+| `KV_NAMESPACE_ID` | KV namespace ID |
 
-### 4. Configure users
+### 4. Configure users (`LX_USERS`)
 
-Configure all users in the GitHub Secret `LX_USERS`. Two formats are supported:
+Two input formats are supported.
 
-**Simple format** (username:password, comma-separated):
+Simple format (comma-separated `username:password` pairs):
 
+```text
+admin:your_password,alice:her_password
 ```
-admin:<USER_NAME>,alice:her_password
-```
 
-**JSON format** (supports additional options):
+JSON format (with extra options):
 
 ```json
 [{"name":"admin","password":"your_password"},{"name":"alice","password":"her_password","maxSnapshotNum":30}]
 ```
 
-**Supported user options:**
+Supported fields:
 
-| Option | Type | Description |
+| Field | Type | Description |
 |---|---|---|
 | `name` | string | Username (required) |
-| `password` | string | Login password (required) |
-| `maxSnapshotNum` | number | Maximum number of snapshots to retain, default 20 |
-| `list.addMusicLocationType` | `"top"` \| `"bottom"` | Where new songs are added, default `"bottom"` |
+| `password` | string | Password (required) |
+| `maxSnapshotNum` | number | Max snapshot retention, default 20 |
+| `list.addMusicLocationType` | `"top"` \| `"bottom"` | Song insert position, default `"bottom"` |
 
-> To add or modify users, simply update the `LX_USERS` Secret — no code or deployment file changes needed.
+To add or update users, change `LX_USERS` only. No code change is needed.
 
 ### 5. Trigger deployment
 
-Manually trigger a deployment from **Actions → Deploy to Cloudflare Workers → Run workflow** in your GitHub repository (after modifying Secrets, you need to manually trigger a deployment).
+Open **Actions -> Deploy to Cloudflare Workers -> Run workflow**.
 
-## Access URL
+If you update Secrets, trigger deployment again manually.
 
-After deployment, the Worker is accessible via its default Workers domain, or you can bind a custom domain.
+### 6. Access URL
 
-### Using the default Workers domain
+Default URL example:
 
-The default URL is:
-
-```
+```text
 https://lx-music-server.<your-subdomain>.workers.dev
 ```
 
-You can also find it in the Cloudflare Dashboard under **Workers & Pages → lx-music-server**.
+You can also bind a custom domain at `Settings -> Domains & Routes -> Custom Domain`.
 
-### Using a custom domain (optional)
-
-1. Add your domain to Cloudflare (**Websites → Add a site**) and follow the prompts to update your domain's NS records to point to Cloudflare
-2. In the Cloudflare Dashboard, go to **Workers & Pages → lx-music-server**
-3. Click **Settings → Domains & Routes → Add → Custom Domain**
-4. Enter the subdomain you want to use (e.g. `sync.example.com`) and click **Add domain**
-5. Cloudflare will automatically create the DNS record and issue an SSL certificate — wait for it to take effect
-
-Once configured, you can access the service at `https://sync.example.com`.
-
-> **Important:** Before switching to a different sync server, make sure to back up your local data to prevent data loss.
+Before migrating from another sync server, back up local client data first.
 
 ## Client Configuration
 
-In LX Music's sync settings:
+In LX Music sync settings:
 
-- **Server URL**: `https://<your-worker-name>.<your-subdomain>.workers.dev` (or your custom domain)
-- **Password**: the corresponding password
+- Server URL: `https://<your-worker-name>.<your-subdomain>.workers.dev` (or custom domain)
+- Password: password for that user
+
+## Device Management API
+
+All endpoints use Basic Auth (same user credentials as sync login).
+
+List authorized devices:
+
+```bash
+curl -u <username>:<password> https://<worker-url>/devices
+```
+
+Revoke a device:
+
+```bash
+curl -u <username>:<password> -X DELETE https://<worker-url>/devices/<clientId>
+```
 
 ## Local Development
 
@@ -130,61 +165,58 @@ pnpm install
 pnpm dev
 ```
 
-> `wrangler dev` simulates Durable Objects and KV locally.
+`wrangler types` is integrated in scripts, so type definitions are generated before dev/deploy.
 
-### Manual deployment (optional)
-
-To deploy to Cloudflare Workers from your local machine:
+Manual deploy:
 
 ```bash
-pnpm install
 pnpm deploy
-```
-
-## Device Management API
-
-All endpoints use HTTP Basic Auth with the same credentials as the sync account.
-
-**List authorized devices:**
-
-```bash
-curl -u <username>:<password> https://<worker-url>/devices
-```
-
-**Revoke a device:**
-
-```bash
-curl -u <username>:<password> -X DELETE https://<worker-url>/devices/<clientId>
 ```
 
 ## Architecture
 
-```
-Client
-  │
-  ├─ GET  /ah              Authentication (new device / re-auth)
-  ├─ GET  /socket          WebSocket upgrade → UserSyncDO
-  ├─ GET  /devices         List devices (Basic Auth)
-  ├─ DELETE /devices/:id   Revoke device (Basic Auth)
-  ├─ GET  /hello           Connectivity check
-  └─ GET  /id              Server unique ID
-
-Cloudflare Workers (stateless routing layer)
-  │  KV stores clientId → userName mapping
-  │
-  └─ UserSyncDO (one instance per user)
-       ├─ DO Storage: device info, playlist snapshots, dislike rule snapshots
-       └─ WebSocket: real-time multi-device sync
+```mermaid
+flowchart TD
+   A[LX Music Client] -->|GET /ah| B[Cloudflare Worker Routes]
+   A -->|GET /socket WebSocket Upgrade| B
+   A -->|GET /devices| B
+   A -->|DELETE /devices/:id| B
+   B -->|Read/Write clientId -> userName| C[(KV Namespace)]
+   B -->|Route by user| D[UserSyncDO]
+   D --> E[(DO Storage)]
+   D --> F[WebSocket Session Hub]
 ```
 
-**Key dependencies:**
+Key dependencies:
 
 | Dependency | Purpose |
 |---|---|
 | [Hono](https://hono.dev) | HTTP routing framework |
 | [message2call](https://github.com/lyswhut/message2call) | WebSocket RPC |
-| [aes-js](https://github.com/ricmoo/aes-js) | AES-128-ECB encryption |
-| [@noble/hashes](https://github.com/paulmillr/noble-hashes) | MD5 implementation |
+| [aes-js](https://github.com/ricmoo/aes-js) | AES encryption |
+| [@noble/hashes](https://github.com/paulmillr/noble-hashes) | Hash implementation |
+
+## FAQ
+
+### 1. I changed `LX_USERS`, but users did not update. Why?
+
+After changing Secrets, run the deployment workflow again.
+
+### 2. Deployment succeeded but client cannot connect. What to check first?
+
+Check these first:
+
+- Worker URL in client settings
+- Username/password consistency with `LX_USERS`
+- `KV_NAMESPACE_ID` matches the correct Cloudflare account
+
+### 3. Can I use only the default `workers.dev` domain?
+
+Yes. Custom domain is optional.
+
+### 4. Any migration advice from old sync servers?
+
+Back up local data before switching server URL.
 
 ## License
 
