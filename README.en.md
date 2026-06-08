@@ -14,8 +14,7 @@ Built for one goal: run multi-device sync without self-hosting servers.
 ## Table of Contents
 
 - [Why This Version](#why-this-version)
-- [5-Minute Quick Start](#5-minute-quick-start)
-- [Full Deployment Guide](#full-deployment-guide)
+- [Deployment Guide](#deployment-guide)
 - [Client Configuration](#client-configuration)
 - [Device Management API](#device-management-api)
 - [Local Development](#local-development)
@@ -31,26 +30,7 @@ Built for one goal: run multi-device sync without self-hosting servers.
 - Snapshot-based incremental merge across multiple devices
 - Fast rollout via GitHub Actions
 
-## 5-Minute Quick Start
-
-If you just want to get it running:
-
-1. Fork this repository
-2. Create a Cloudflare KV namespace and copy `KV_NAMESPACE_ID`
-3. Create a Cloudflare API token with Edit permissions for Workers Scripts/KV/DO
-4. In your GitHub repo settings, configure:
-  - Secret: `CLOUDFLARE_API_TOKEN`
-  - Secret: `LX_USERS`
-  - Variable: `KV_NAMESPACE_ID`
-5. Run `Deploy to Cloudflare Workers` in Actions
-
-Minimal `LX_USERS` example:
-
-```text
-admin:your_password,alice:her_password
-```
-
-## Full Deployment Guide
+## Deployment Guide
 
 ### 1. Create a Cloudflare KV Namespace
 
@@ -198,11 +178,20 @@ Key dependencies:
 
 ## FAQ
 
-### 1. I changed `LX_USERS`, but users did not update. Why?
+### 1. Deployment failed. What should I check first?
+
+Check GitHub Actions config placement first:
+
+- `KV_NAMESPACE_ID` must be in **Variables**
+- `CLOUDFLARE_API_TOKEN` and `LX_USERS` must be in **Secrets**
+
+If Variables and Secrets are mixed up, deployment will fail.
+
+### 2. I changed `LX_USERS`, but users did not update. Why?
 
 After changing Secrets, run the deployment workflow again.
 
-### 2. Deployment succeeded but client cannot connect. What to check first?
+### 3. Deployment succeeded but client cannot connect. What to check first?
 
 Check these first:
 
@@ -210,11 +199,11 @@ Check these first:
 - Username/password consistency with `LX_USERS`
 - `KV_NAMESPACE_ID` matches the correct Cloudflare account
 
-### 3. Can I use only the default `workers.dev` domain?
+### 4. Can I use only the default `workers.dev` domain?
 
 Yes. Custom domain is optional.
 
-### 4. Any migration advice from old sync servers?
+### 5. Any migration advice from old sync servers?
 
 Back up local data before switching server URL.
 

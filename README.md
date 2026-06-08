@@ -14,8 +14,7 @@
 ## 目录
 
 - [为什么选这个版本](#为什么选这个版本)
-- [5 分钟快速开始](#5-分钟快速开始)
-- [完整部署指南](#完整部署指南)
+- [部署指南](#部署指南)
 - [客户端配置](#客户端配置)
 - [设备管理 API](#设备管理-api)
 - [本地开发](#本地开发)
@@ -31,26 +30,7 @@
 - 快照合并：支持多设备增量同步和冲突处理
 - 一键部署：配合 GitHub Actions 可以快速上线
 
-## 5 分钟快速开始
-
-只想先跑起来，可以按这个最短路径：
-
-1. Fork 本仓库
-2. 在 Cloudflare 创建一个 KV Namespace，拿到 `KV_NAMESPACE_ID`
-3. 在 Cloudflare 创建 API Token（Workers Scripts/KV/DO 都要 Edit 权限）
-4. 在 GitHub 仓库配置：
-  - Secret: `CLOUDFLARE_API_TOKEN`
-  - Secret: `LX_USERS`
-  - Variable: `KV_NAMESPACE_ID`
-5. 在 Actions 手动运行 `Deploy to Cloudflare Workers`
-
-`LX_USERS` 最小示例：
-
-```text
-admin:your_password,alice:her_password
-```
-
-## 完整部署指南
+## 部署指南
 
 ### 1. 创建 Cloudflare KV Namespace
 
@@ -198,11 +178,20 @@ flowchart TD
 
 ## FAQ
 
-### 1. 我改了 `LX_USERS` 但没有生效？
+### 1. 部署失败，可能是什么原因？
+
+先检查 GitHub Actions 配置项位置是否放对：
+
+- `KV_NAMESPACE_ID` 必须放在 **Variables**
+- `CLOUDFLARE_API_TOKEN` 和 `LX_USERS` 必须放在 **Secrets**
+
+如果把 Variables 和 Secrets 混淆，部署会直接失败。
+
+### 2. 我改了 `LX_USERS` 但没有生效？
 
 改 Secret 之后需要重新触发一次 GitHub Actions 部署。
 
-### 2. 部署后连接失败应该先查什么？
+### 3. 部署后连接失败应该先查什么？
 
 优先检查：
 
@@ -210,11 +199,11 @@ flowchart TD
 - 用户名和密码是否和 `LX_USERS` 一致
 - `KV_NAMESPACE_ID` 与 Cloudflare 账号是否对应
 
-### 3. 可以只用 Workers 默认域名吗？
+### 4. 可以只用 Workers 默认域名吗？
 
 可以，默认 `workers.dev` 域名即可正常使用。
 
-### 4. 迁移旧服务前有什么建议？
+### 5. 迁移旧服务前有什么建议？
 
 先备份客户端本地数据，再切换服务器地址，降低丢数据风险。
 
