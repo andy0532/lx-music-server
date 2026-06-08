@@ -1,9 +1,9 @@
-import * as aesjs from 'aes-js'
 import { md5 } from '@noble/hashes/legacy.js'
 import { bytesToHex } from '@noble/hashes/utils.js'
+import * as aesjs from 'aes-js'
 
 const b64ToBytes = (b64: string): Uint8Array =>
-  Uint8Array.from(atob(b64), c => c.charCodeAt(0))
+  Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
 
 const bytesToB64 = (bytes: Uint8Array): string => {
   let binary = ''
@@ -43,7 +43,10 @@ export const aesDecrypt = (text: string, key: string): string => {
   return new TextDecoder().decode(decrypted)
 }
 
-export const rsaEncrypt = async(data: string | Uint8Array, pemKey: string): Promise<string> => {
+export const rsaEncrypt = async (
+  data: string | Uint8Array,
+  pemKey: string,
+): Promise<string> => {
   const b64 = pemKey
     .replace(/-----BEGIN PUBLIC KEY-----/, '')
     .replace(/-----END PUBLIC KEY-----/, '')
@@ -57,7 +60,11 @@ export const rsaEncrypt = async(data: string | Uint8Array, pemKey: string): Prom
     ['encrypt'],
   )
   const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data
-  const encrypted = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, cryptoKey, bytes)
+  const encrypted = await crypto.subtle.encrypt(
+    { name: 'RSA-OAEP' },
+    cryptoKey,
+    bytes,
+  )
   return bytesToB64(new Uint8Array(encrypted))
 }
 

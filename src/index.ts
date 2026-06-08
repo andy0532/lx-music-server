@@ -1,8 +1,8 @@
 import { Hono } from 'hono'
 import { SYNC_CODE } from '@/constants'
-import helloRoutes from '@/routes/hello'
 import authRoutes from '@/routes/auth'
 import devicesRoutes from '@/routes/devices'
+import helloRoutes from '@/routes/hello'
 
 export { UserSyncDO } from '@/durable/UserSyncDO'
 
@@ -13,7 +13,7 @@ app.route('/', authRoutes)
 app.route('/', devicesRoutes)
 
 // WebSocket upgrade → UserSyncDO
-app.get('/socket', async(c) => {
+app.get('/socket', async (c) => {
   const upgradeHeader = c.req.header('upgrade')
   if (upgradeHeader?.toLowerCase() !== 'websocket') {
     return c.text('Expected WebSocket', 426)
@@ -36,9 +36,14 @@ app.get('/socket', async(c) => {
   const doStub = c.env.USER_SYNC.get(doId)
 
   // 转发 WebSocket upgrade 到 DO
-  return doStub.fetch(new Request(`https://do/ws?i=${encodeURIComponent(clientId)}&t=${encodeURIComponent(token)}`, {
-    headers: c.req.raw.headers,
-  }))
+  return doStub.fetch(
+    new Request(
+      `https://do/ws?i=${encodeURIComponent(clientId)}&t=${encodeURIComponent(token)}`,
+      {
+        headers: c.req.raw.headers,
+      },
+    ),
+  )
 })
 
 export default app

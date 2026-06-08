@@ -20,10 +20,12 @@ export class SnapshotDataManage {
     return this.clientSnapshotKeys.has(key)
   }
 
-  clearOldSnapshot = async() => {
+  clearOldSnapshot = async () => {
     if (!this.snapshotInfo) return
-    const snapshotList = this.snapshotInfo.list.filter(key => !this.isIncludesDevice(key))
-    let requiredSave = snapshotList.length > this.maxSnapshotNum
+    const snapshotList = this.snapshotInfo.list.filter(
+      (key) => !this.isIncludesDevice(key),
+    )
+    const requiredSave = snapshotList.length > this.maxSnapshotNum
     while (snapshotList.length > this.maxSnapshotNum) {
       const name = snapshotList.pop()
       if (name) {
@@ -34,9 +36,13 @@ export class SnapshotDataManage {
     if (requiredSave) this.saveSnapshotInfo(this.snapshotInfo)
   }
 
-  updateDeviceSnapshotKey = async(clientId: string, key: string) => {
+  updateDeviceSnapshotKey = async (clientId: string, key: string) => {
     let client = this.snapshotInfo.clients[clientId]
-    if (!client) client = this.snapshotInfo.clients[clientId] = { snapshotKey: '', lastSyncDate: 0 }
+    if (!client)
+      client = this.snapshotInfo.clients[clientId] = {
+        snapshotKey: '',
+        lastSyncDate: 0,
+      }
     if (client.snapshotKey) this.clientSnapshotKeys.delete(client.snapshotKey)
     client.snapshotKey = key
     client.lastSyncDate = Date.now()
@@ -44,12 +50,12 @@ export class SnapshotDataManage {
     this.saveSnapshotInfoThrottle()
   }
 
-  getDeviceCurrentSnapshotKey = async(clientId: string) => {
+  getDeviceCurrentSnapshotKey = async (clientId: string) => {
     const client = this.snapshotInfo.clients[clientId]
     return client?.snapshotKey
   }
 
-  getSnapshotInfo = async(): Promise<SnapshotInfo> => {
+  getSnapshotInfo = async (): Promise<SnapshotInfo> => {
     return this.snapshotInfo
   }
 
@@ -67,7 +73,9 @@ export class SnapshotDataManage {
     this.saveSnapshotInfoThrottle()
   }
 
-  getSnapshot = async(name: string): Promise<LX.Dislike.DislikeRules | null> => {
+  getSnapshot = async (
+    name: string,
+  ): Promise<LX.Dislike.DislikeRules | null> => {
     try {
       const data = await this.storage.get<string>(`${this.prefix}:snap:${name}`)
       return data ?? null
@@ -77,17 +85,17 @@ export class SnapshotDataManage {
     }
   }
 
-  saveSnapshot = async(name: string, data: string) => {
+  saveSnapshot = async (name: string, data: string) => {
     console.log('saveSnapshot', this.userName, name)
     await this.storage.put(`${this.prefix}:snap:${name}`, data)
   }
 
-  removeSnapshot = async(name: string) => {
+  removeSnapshot = async (name: string) => {
     console.log('removeSnapshot', this.userName, name)
     await this.storage.delete(`${this.prefix}:snap:${name}`)
   }
 
-  flush = async(): Promise<void> => {
+  flush = async (): Promise<void> => {
     await this.storage.put(`${this.prefix}:snapshotInfo`, this.snapshotInfo)
   }
 
@@ -105,11 +113,18 @@ export class SnapshotDataManage {
     this.snapshotInfo = preloadedSnapshotInfo
 
     this.saveSnapshotInfoThrottle = throttle(() => {
-      void this.storage.put(`${this.prefix}:snapshotInfo`, this.snapshotInfo).then(() => {
-        return this.clearOldSnapshot()
-      }).catch(err => console.error(err))
+      void this.storage
+        .put(`${this.prefix}:snapshotInfo`, this.snapshotInfo)
+        .then(() => {
+          return this.clearOldSnapshot()
+        })
+        .catch((err) => console.error(err))
     })
 
-    this.clientSnapshotKeys = new Set(Object.values(this.snapshotInfo.clients).map(device => device.snapshotKey).filter(k => k))
+    this.clientSnapshotKeys = new Set(
+      Object.values(this.snapshotInfo.clients)
+        .map((device) => device.snapshotKey)
+        .filter((k) => k),
+    )
   }
 }

@@ -1,14 +1,25 @@
 import { createMsg2call } from 'message2call'
 import { SYNC_CLOSE_CODE, SYNC_CODE } from '@/constants'
-import { aesDecrypt, aesEncrypt, rsaEncrypt, toMD5 } from '@/utils/crypto'
-import { decryptMsg, encryptMsg } from '@/utils/compress'
-import { callObj, sync } from '@/sync'
-import { ListEvent } from '@/modules/list/event'
+import type { DislikeEventType } from '@/modules/dislike/event'
 import { DislikeEvent } from '@/modules/dislike/event'
-import { setUserSpace, createUserSpace, type UserSpace } from '@/user'
-import { setUsersContext, getUserConfig, createClientKeyInfo } from '@/user/data'
+import type { ListEventType } from '@/modules/list/event'
+import { ListEvent } from '@/modules/list/event'
+import { callObj, sync } from '@/sync'
+import { createUserSpace, setUserSpace, type UserSpace } from '@/user'
+import {
+  createClientKeyInfo,
+  getUserConfig,
+  setUsersContext,
+} from '@/user/data'
+import { decryptMsg, encryptMsg } from '@/utils/compress'
+import { aesDecrypt, aesEncrypt, rsaEncrypt, toMD5 } from '@/utils/crypto'
 
-const DEFAULT_SNAPSHOT_INFO = { latest: null as string | null, time: 0, list: [] as string[], clients: {} as Record<string, any> }
+const DEFAULT_SNAPSHOT_INFO = {
+  latest: null as string | null,
+  time: 0,
+  list: [] as string[],
+  clients: {} as Record<string, any>,
+}
 
 const IP_FAILURE_TTL_MS = 60 * 1000
 const IP_FAILURE_LIMIT = 10
@@ -23,45 +34,73 @@ export class UserSyncDO implements DurableObject {
   private pingInterval: ReturnType<typeof setInterval> | null = null
   private userSpace: UserSpace | null = null
   private readonly listSyncRef: { current: string | null } = { current: null }
-  private readonly dislikeSyncRef: { current: string | null } = { current: null }
+  private readonly dislikeSyncRef: { current: string | null } = {
+    current: null,
+  }
 
   constructor(state: DurableObjectState, env: LX.Env) {
     this.state = state
     this.env = env
 
-    this.state.blockConcurrencyWhile(async() => {
+    this.state.blockConcurrencyWhile(async () => {
       await this.initialize()
     })
   }
 
   private getUsers(): LX.User[] {
-    try { return JSON.parse(this.env.LX_USERS || '[]') } catch { return [] }
+    try {
+      return JSON.parse(this.env.LX_USERS || '[]')
+    } catch {
+      return []
+    }
   }
 
   private async loadAndInit(userName: string) {
     const users = this.getUsers()
     setUsersContext(users, 20)
 
-    const devicesInfo = await this.state.storage.get<{ userName: string; clients: Record<string, LX.Sync.KeyInfo> }>('devices')
-      ?? { userName, clients: {} }
+    const devicesInfo = (await this.state.storage.get<{
+      userName: string
+      clients: Record<string, LX.Sync.KeyInfo>
+    }>('devices')) ?? { userName, clients: {} }
     devicesInfo.userName = userName
 
-    const listSnapshotInfo = await this.state.storage.get<any>('list:snapshotInfo') ?? { ...DEFAULT_SNAPSHOT_INFO, list: [], clients: {} }
-    const dislikeSnapshotInfo = await this.state.storage.get<any>('dislike:snapshotInfo') ?? { ...DEFAULT_SNAPSHOT_INFO, list: [], clients: {} }
+    const listSnapshotInfo = (await this.state.storage.get<any>(
+      'list:snapshotInfo',
+    )) ?? { ...DEFAULT_SNAPSHOT_INFO, list: [], clients: {} }
+    const dislikeSnapshotInfo = (await this.state.storage.get<any>(
+      'dislike:snapshotInfo',
+    )) ?? { ...DEFAULT_SNAPSHOT_INFO, list: [], clients: {} }
 
-    const emptyListData = (): LX.Sync.List.ListData => ({ defaultList: [], loveList: [], userList: [] })
+    const emptyListData = (): LX.Sync.List.ListData => ({
+      defaultList: [],
+      loveList: [],
+      userList: [],
+    })
     let listData: LX.Sync.List.ListData = emptyListData()
     if (listSnapshotInfo.latest) {
-      listData = await this.state.storage.get<LX.Sync.List.ListData>(`list:snap:${listSnapshotInfo.latest}`) ?? emptyListData()
+      listData =
+        (await this.state.storage.get<LX.Sync.List.ListData>(
+          `list:snap:${listSnapshotInfo.latest}`,
+        )) ?? emptyListData()
     }
     let dislikeRules = ''
     if (dislikeSnapshotInfo.latest) {
-      dislikeRules = await this.state.storage.get<string>(`dislike:snap:${dislikeSnapshotInfo.latest}`) ?? ''
+      dislikeRules =
+        (await this.state.storage.get<string>(
+          `dislike:snap:${dislikeSnapshotInfo.latest}`,
+        )) ?? ''
     }
 
-    const maxSnapshotNum = userName ? (() => {
-      try { return getUserConfig(userName).maxSnapshotNum } catch { return 20 }
-    })() : 20
+    const maxSnapshotNum = userName
+      ? (() => {
+          try {
+            return getUserConfig(userName).maxSnapshotNum
+          } catch {
+            return 20
+          }
+        })()
+      : 20
 
     const userSpace = createUserSpace(
       devicesInfo,
@@ -76,12 +115,16 @@ export class UserSyncDO implements DurableObject {
     this.userSpace = userSpace
     setUserSpace(userSpace)
 
-    if (!global.event_list) global.event_list = new ListEvent() as any
-    if (!global.event_dislike) global.event_dislike = new DislikeEvent() as any
+    if (!global.event_list) global.event_list = new ListEvent() as ListEventType
+    if (!global.event_dislike)
+      global.event_dislike = new DislikeEvent() as DislikeEventType
   }
 
   private async initialize() {
-    const devicesInfo = await this.state.storage.get<{ userName: string; clients: Record<string, LX.Sync.KeyInfo> }>('devices')
+    const devicesInfo = await this.state.storage.get<{
+      userName: string
+      clients: Record<string, LX.Sync.KeyInfo>
+    }>('devices')
     this.userName = devicesInfo?.userName ?? ''
     await this.loadAndInit(this.userName)
   }
@@ -92,7 +135,8 @@ export class UserSyncDO implements DurableObject {
     if (url.pathname === '/server-id') return this.handleGetServerId()
     if (url.pathname === '/auth') return this.handleAuth(request)
     if (url.pathname === '/ws') return this.handleWebSocketUpgrade(request)
-    if (url.pathname === '/devices' && request.method === 'GET') return this.handleGetDevices()
+    if (url.pathname === '/devices' && request.method === 'GET')
+      return this.handleGetDevices()
     if (url.pathname.startsWith('/devices/') && request.method === 'DELETE') {
       const clientId = url.pathname.slice('/devices/'.length)
       return this.handleRemoveDevice(clientId)
@@ -112,11 +156,16 @@ export class UserSyncDO implements DurableObject {
   }
 
   private async handleGetDevices(): Promise<Response> {
-    if (!this.userSpace) return new Response('[]', { headers: { 'content-type': 'application/json' } })
+    if (!this.userSpace)
+      return new Response('[]', {
+        headers: { 'content-type': 'application/json' },
+      })
     const devices = await this.userSpace.getDevices()
     // key is the per-device AES symmetric key — never expose it over the management API
     const safeDevices = devices.map(({ key: _key, ...rest }) => rest)
-    return new Response(JSON.stringify(safeDevices), { headers: { 'content-type': 'application/json' } })
+    return new Response(JSON.stringify(safeDevices), {
+      headers: { 'content-type': 'application/json' },
+    })
   }
 
   private async handleRemoveDevice(clientId: string): Promise<Response> {
@@ -133,7 +182,11 @@ export class UserSyncDO implements DurableObject {
   }
 
   private async handleAuth(request: Request): Promise<Response> {
-    const body = await request.json<{ encryptedMsg: string; clientId?: string; serverName: string }>()
+    const body = await request.json<{
+      encryptedMsg: string
+      clientId?: string
+      serverName: string
+    }>()
     const { encryptedMsg, clientId, serverName } = body
 
     // 已知设备重新认证
@@ -142,8 +195,13 @@ export class UserSyncDO implements DurableObject {
       const keyInfo = this.userSpace.dataManage.getClientKeyInfo(clientId)
       if (!keyInfo) return new Response(null, { status: 404 })
       let text: string
-      try { text = aesDecrypt(encryptedMsg, keyInfo.key) } catch { return new Response(null, { status: 401 }) }
-      if (!text.startsWith(SYNC_CODE.authMsg)) return new Response(null, { status: 401 })
+      try {
+        text = aesDecrypt(encryptedMsg, keyInfo.key)
+      } catch {
+        return new Response(null, { status: 401 })
+      }
+      if (!text.startsWith(SYNC_CODE.authMsg))
+        return new Response(null, { status: 401 })
       const deviceName = text.replace(SYNC_CODE.authMsg, '') || 'Unknown'
       if (deviceName !== keyInfo.deviceName) {
         keyInfo.deviceName = deviceName
@@ -157,7 +215,11 @@ export class UserSyncDO implements DurableObject {
     for (const userInfo of users) {
       const key = btoa(toMD5(userInfo.password).substring(0, 16))
       let text: string
-      try { text = aesDecrypt(encryptedMsg, key) } catch { continue }
+      try {
+        text = aesDecrypt(encryptedMsg, key)
+      } catch {
+        continue
+      }
       if (!text.startsWith(SYNC_CODE.authMsg)) continue
 
       const data = text.split('\n')
@@ -177,12 +239,23 @@ export class UserSyncDO implements DurableObject {
       await this.userSpace!.dataManage.saveClientKeyInfo(keyInfo)
 
       const encrypted = await rsaEncrypt(
-        JSON.stringify({ clientId: keyInfo.clientId, key: keyInfo.key, serverName }),
+        JSON.stringify({
+          clientId: keyInfo.clientId,
+          key: keyInfo.key,
+          serverName,
+        }),
         publicKey,
       )
-      return new Response(JSON.stringify({ encrypted, clientId: keyInfo.clientId, userName: userInfo.name }), {
-        headers: { 'content-type': 'application/json' },
-      })
+      return new Response(
+        JSON.stringify({
+          encrypted,
+          clientId: keyInfo.clientId,
+          userName: userInfo.name,
+        }),
+        {
+          headers: { 'content-type': 'application/json' },
+        },
+      )
     }
     return new Response(null, { status: 401 })
   }
@@ -196,7 +269,11 @@ export class UserSyncDO implements DurableObject {
     const ip = request.headers.get('cf-connecting-ip') ?? 'unknown'
     const now = Date.now()
     const failureEntry = this.ipFailures.get(ip)
-    if (failureEntry && now < failureEntry.resetAt && failureEntry.count >= IP_FAILURE_LIMIT) {
+    if (
+      failureEntry &&
+      now < failureEntry.resetAt &&
+      failureEntry.count >= IP_FAILURE_LIMIT
+    ) {
       return new Response(SYNC_CODE.msgBlockedIp, { status: 403 })
     }
 
@@ -221,7 +298,9 @@ export class UserSyncDO implements DurableObject {
     }
 
     let text: string
-    try { text = aesDecrypt(token, keyInfo.key) } catch {
+    try {
+      text = aesDecrypt(token, keyInfo.key)
+    } catch {
       recordIpFailure()
       return new Response(SYNC_CODE.msgAuthFailed, { status: 401 })
     }
@@ -233,7 +312,7 @@ export class UserSyncDO implements DurableObject {
     this.ipFailures.delete(ip)
 
     const users = this.getUsers()
-    const user = users.find(u => u.name === this.userName)
+    const user = users.find((u) => u.name === this.userName)
     if (!user) return new Response(SYNC_CODE.msgAuthFailed, { status: 401 })
 
     keyInfo.lastConnectDate = Date.now()
@@ -255,12 +334,14 @@ export class UserSyncDO implements DurableObject {
       }
     }
 
-    sync(socket).then(() => {
-      socket.isReady = true
-    }).catch(err => {
-      console.warn('sync error:', err?.message)
-      socket.close(SYNC_CLOSE_CODE.failed)
-    })
+    sync(socket)
+      .then(() => {
+        socket.isReady = true
+      })
+      .catch((err) => {
+        console.warn('sync error:', err?.message)
+        socket.close(SYNC_CLOSE_CODE.failed)
+      })
 
     this.startPingInterval()
 
@@ -278,7 +359,11 @@ export class UserSyncDO implements DurableObject {
     }, PING_INTERVAL_MS)
   }
 
-  private createSocket(ws: WebSocket, keyInfo: LX.Sync.KeyInfo, user: LX.User): LX.Socket {
+  private createSocket(
+    ws: WebSocket,
+    keyInfo: LX.Sync.KeyInfo,
+    user: LX.User,
+  ): LX.Socket {
     let disconnected = false
     const closeHandlers: Array<(err: Error) => void> = []
 
@@ -287,16 +372,21 @@ export class UserSyncDO implements DurableObject {
       timeout: 120 * 1000,
       sendMessage: (data) => {
         if (disconnected) throw new Error('disconnected')
-        void encryptMsg(keyInfo, JSON.stringify(data)).then(encrypted => {
-          ws.send(encrypted)
-        }).catch(err => {
-          console.error('encrypt error:', err)
-          ws.close(SYNC_CLOSE_CODE.failed)
-        })
+        void encryptMsg(keyInfo, JSON.stringify(data))
+          .then((encrypted) => {
+            ws.send(encrypted)
+          })
+          .catch((err) => {
+            console.error('encrypt error:', err)
+            ws.close(SYNC_CLOSE_CODE.failed)
+          })
       },
       onCallBeforeParams: (rawArgs) => [socket, ...rawArgs],
       onError: (error, path, groupName) => {
-        console.error(`sync call ${user.name} ${keyInfo.deviceName} ${groupName ?? ''} ${path.join('.')}:`, error)
+        console.error(
+          `sync call ${user.name} ${keyInfo.deviceName} ${groupName ?? ''} ${path.join('.')}:`,
+          error,
+        )
       },
     })
 
@@ -315,24 +405,40 @@ export class UserSyncDO implements DurableObject {
       },
       onClose: (handler) => {
         closeHandlers.push(handler)
-        return () => { closeHandlers.splice(closeHandlers.indexOf(handler), 1) }
+        return () => {
+          closeHandlers.splice(closeHandlers.indexOf(handler), 1)
+        }
       },
       send: (data, cb) => {
-        try { ws.send(data); cb?.() } catch (err: any) { cb?.(err) }
+        try {
+          ws.send(data)
+          cb?.()
+        } catch (err: any) {
+          cb?.(err)
+        }
       },
-      close: (code) => { ws.close(code) },
+      close: (code) => {
+        ws.close(code)
+      },
     }
 
     ws.addEventListener('message', (event) => {
       if (typeof event.data !== 'string') return
-      void decryptMsg(keyInfo, event.data).then(data => {
-        let parsed: any
-        try { parsed = JSON.parse(data) } catch { ws.close(SYNC_CLOSE_CODE.failed); return }
-        msg2call.message(parsed)
-      }).catch(err => {
-        console.error('decrypt error:', err)
-        ws.close(SYNC_CLOSE_CODE.failed)
-      })
+      void decryptMsg(keyInfo, event.data)
+        .then((data) => {
+          let parsed: any
+          try {
+            parsed = JSON.parse(data)
+          } catch {
+            ws.close(SYNC_CLOSE_CODE.failed)
+            return
+          }
+          msg2call.message(parsed)
+        })
+        .catch((err) => {
+          console.error('decrypt error:', err)
+          ws.close(SYNC_CLOSE_CODE.failed)
+        })
     })
 
     ws.addEventListener('close', () => {
@@ -348,11 +454,14 @@ export class UserSyncDO implements DurableObject {
         void this.userSpace?.flush()
       }
       const err = new Error('closed')
-      for (const h of closeHandlers) { try { h(err) } catch {} }
+      for (const h of closeHandlers) {
+        try {
+          h(err)
+        } catch {}
+      }
       console.log('disconnected', user.name, keyInfo.deviceName)
     })
 
     return socket
   }
-
 }

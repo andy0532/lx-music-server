@@ -1,8 +1,9 @@
-import handler from './handler'
 import { callObj as _callObj } from '@/modules'
-export { sync } from './sync'
+import handler from './handler'
+
 export { modules } from '@/modules'
 export * from './event'
+export { sync } from './sync'
 
 export const callObj = {
   ...handler,

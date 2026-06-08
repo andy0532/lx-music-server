@@ -1,13 +1,15 @@
 import { Hono } from 'hono'
 import { SYNC_CODE } from '@/constants'
-import { toMD5, aesDecrypt } from '@/utils/crypto'
+import { aesDecrypt, toMD5 } from '@/utils/crypto'
 
 const app = new Hono<{ Bindings: LX.Env }>()
 
 const getIP = (c: { req: { raw: Request } }) => {
-  return c.req.raw.headers.get('cf-connecting-ip')
-    ?? c.req.raw.headers.get('x-forwarded-for')
-    ?? 'unknown'
+  return (
+    c.req.raw.headers.get('cf-connecting-ip') ??
+    c.req.raw.headers.get('x-forwarded-for') ??
+    'unknown'
+  )
 }
 
 // In-memory rate limiting per IP (resets on Worker restart, sufficient as first-pass guard)
@@ -32,9 +34,11 @@ const recordFailure = (ip: string) => {
   }
 }
 
-const clearFailures = (ip: string) => { ipFailures.delete(ip) }
+const clearFailures = (ip: string) => {
+  ipFailures.delete(ip)
+}
 
-app.get('/ah', async(c) => {
+app.get('/ah', async (c) => {
   const ip = getIP(c)
   if (checkRateLimit(ip)) return c.text(SYNC_CODE.msgBlockedIp, 403)
 
@@ -75,7 +79,12 @@ app.get('/ah', async(c) => {
   }
 
   // 新设备首次认证
-  console.log('[auth] new device, users:', users.length, 'encryptedMsg len:', encryptedMsg.length)
+  console.log(
+    '[auth] new device, users:',
+    users.length,
+    'encryptedMsg len:',
+    encryptedMsg.length,
+  )
   for (const userInfo of users) {
     const keyHex = toMD5(userInfo.password).substring(0, 16)
     const key = btoa(keyHex)
@@ -83,7 +92,10 @@ app.get('/ah', async(c) => {
     let text: string
     try {
       text = aesDecrypt(encryptedMsg, key)
-      console.log('[auth] decrypt ok, starts with authMsg:', text.startsWith(SYNC_CODE.authMsg))
+      console.log(
+        '[auth] decrypt ok, starts with authMsg:',
+        text.startsWith(SYNC_CODE.authMsg),
+      )
     } catch (e: any) {
       console.log('[auth] decrypt failed:', e?.message)
       continue
@@ -103,7 +115,11 @@ app.get('/ah', async(c) => {
       return c.text(SYNC_CODE.msgAuthFailed, 401)
     }
 
-    const result = await resp.json<{ encrypted: string; clientId: string; userName: string }>()
+    const result = await resp.json<{
+      encrypted: string
+      clientId: string
+      userName: string
+    }>()
     await kv.put(`client:${result.clientId}`, result.userName)
     clearFailures(ip)
     return c.text(result.encrypted)

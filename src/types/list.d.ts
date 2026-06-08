@@ -41,7 +41,10 @@ declare namespace LX {
       tempList: MyTempListInfo
     }
 
-    type ListActionDataOverwrite = MakeOptional<LX.List.ListDataFull, 'tempList'>
+    type ListActionDataOverwrite = MakeOptional<
+      LX.List.ListDataFull,
+      'tempList'
+    >
     interface ListActionAdd {
       position: number
       listInfos: UserListInfo[]

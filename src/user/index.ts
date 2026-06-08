@@ -1,6 +1,6 @@
-import { UserDataManage, type DevicesInfo } from './data'
-import { ListManage } from '@/modules/list/manage'
 import { DislikeManage } from '@/modules/dislike/manage'
+import { ListManage } from '@/modules/list/manage'
+import { type DevicesInfo, UserDataManage } from './data'
 
 export interface UserSpace {
   dataManage: UserDataManage
@@ -34,8 +34,20 @@ export const createUserSpace = (
   maxSnapshotNum: number,
 ): UserSpace => {
   const dataManage = new UserDataManage(devicesInfo, storage)
-  const listManage = new ListManage(storage, listSnapshotInfo, listData, userName, maxSnapshotNum)
-  const dislikeManage = new DislikeManage(storage, dislikeSnapshotInfo, dislikeRules, userName, maxSnapshotNum)
+  const listManage = new ListManage(
+    storage,
+    listSnapshotInfo,
+    listData,
+    userName,
+    maxSnapshotNum,
+  )
+  const dislikeManage = new DislikeManage(
+    storage,
+    dislikeSnapshotInfo,
+    dislikeRules,
+    userName,
+    maxSnapshotNum,
+  )
 
   const userSpace: UserSpace = {
     dataManage,

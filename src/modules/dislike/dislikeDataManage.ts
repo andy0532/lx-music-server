@@ -1,5 +1,5 @@
 import { SPLIT_CHAR } from '@/constants'
-import { type SnapshotDataManage } from './snapshotDataManage'
+import type { SnapshotDataManage } from './snapshotDataManage'
 import { filterRules } from './utils'
 
 const filterRulesToString = (rules: string) => {
@@ -10,31 +10,41 @@ export class DislikeDataManage {
   snapshotDataManage: SnapshotDataManage
   dislikeRules = ''
 
-  constructor(snapshotDataManage: SnapshotDataManage, preloadedDislikeRules?: LX.Dislike.DislikeRules) {
+  constructor(
+    snapshotDataManage: SnapshotDataManage,
+    preloadedDislikeRules?: LX.Dislike.DislikeRules,
+  ) {
     this.snapshotDataManage = snapshotDataManage
 
     if (preloadedDislikeRules !== undefined) {
       this.dislikeRules = preloadedDislikeRules
     } else {
       let dislikeRules: LX.Dislike.DislikeRules | null
-      void this.snapshotDataManage.getSnapshotInfo().then(async(snapshotInfo) => {
-        if (snapshotInfo.latest) dislikeRules = await this.snapshotDataManage.getSnapshot(snapshotInfo.latest)
-        if (!dislikeRules) dislikeRules = ''
-        this.dislikeRules = dislikeRules
-      })
+      void this.snapshotDataManage
+        .getSnapshotInfo()
+        .then(async (snapshotInfo) => {
+          if (snapshotInfo.latest)
+            dislikeRules = await this.snapshotDataManage.getSnapshot(
+              snapshotInfo.latest,
+            )
+          if (!dislikeRules) dislikeRules = ''
+          this.dislikeRules = dislikeRules
+        })
     }
   }
 
-  getDislikeRules = async(): Promise<LX.Dislike.DislikeRules> => {
+  getDislikeRules = async (): Promise<LX.Dislike.DislikeRules> => {
     return this.dislikeRules
   }
 
-  addDislikeInfo = async(infos: LX.Dislike.DislikeMusicInfo[]) => {
-    this.dislikeRules = filterRulesToString(this.dislikeRules + '\n' + infos.map(info => `${info.name ?? ''}${SPLIT_CHAR.DISLIKE_NAME}${info.singer ?? ''}`).join('\n'))
+  addDislikeInfo = async (infos: LX.Dislike.DislikeMusicInfo[]) => {
+    this.dislikeRules = filterRulesToString(
+      `${this.dislikeRules}\n${infos.map((info) => `${info.name ?? ''}${SPLIT_CHAR.DISLIKE_NAME}${info.singer ?? ''}`).join('\n')}`,
+    )
     return this.dislikeRules
   }
 
-  overwriteDislikeInfo = async(rules: string) => {
+  overwriteDislikeInfo = async (rules: string) => {
     this.dislikeRules = filterRulesToString(rules)
     return this.dislikeRules
   }

@@ -8,7 +8,10 @@ declare namespace LX {
     remote: LX.Sync.ClientSyncActions
     remoteQueueList: LX.Sync.ClientSyncListActions
     remoteQueueDislike: LX.Sync.ClientSyncDislikeActions
-    syncRefs: { list: { current: string | null }; dislike: { current: string | null } }
+    syncRefs: {
+      list: { current: string | null }
+      dislike: { current: string | null }
+    }
     broadcast: (handler: (client: LX.Socket) => void) => void
     onClose: (handler: (err: Error) => void) => () => void
     send: (data: string, cb?: (err?: Error) => void) => void

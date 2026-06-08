@@ -1,22 +1,33 @@
 declare namespace LX {
   namespace Music {
-    interface MusicQualityType { // {"type": "128k", size: "3.56M"}
+    interface MusicQualityType {
+      // {"type": "128k", size: "3.56M"}
       type: LX.Quality
       size: string | null
     }
-    interface MusicQualityTypeKg { // {"type": "128k", size: "3.56M"}
+    interface MusicQualityTypeKg {
+      // {"type": "128k", size: "3.56M"}
       type: LX.Quality
       size: string | null
       hash: string
     }
-    type _MusicQualityType = Partial<Record<Quality, {
-      size: string | null
-    }>>
-    type _MusicQualityTypeKg = Partial<Record<Quality, {
-      size: string | null
-      hash: string
-    }>>
-
+    type _MusicQualityType = Partial<
+      Record<
+        Quality,
+        {
+          size: string | null
+        }
+      >
+    >
+    type _MusicQualityTypeKg = Partial<
+      Record<
+        Quality,
+        {
+          size: string | null
+          hash: string
+        }
+      >
+    >
 
     interface MusicInfoMetaBase {
       songId: string | number // 歌曲ID，mg源为copyrightId，local为文件路径
@@ -34,7 +45,6 @@ declare namespace LX {
       filePath: string
       ext: string
     }
-
 
     interface MusicInfoBase<S = LX.Source> {
       id: string
@@ -81,7 +91,11 @@ declare namespace LX {
       meta: MusicInfoMeta_mg
     }
 
-    type MusicInfoOnline = MusicInfo_online_common | MusicInfo_kg | MusicInfo_tx | MusicInfo_mg
+    type MusicInfoOnline =
+      | MusicInfo_online_common
+      | MusicInfo_kg
+      | MusicInfo_tx
+      | MusicInfo_mg
     type MusicInfo = MusicInfoOnline | MusicInfoLocal
 
     interface LyricInfo {
@@ -117,6 +131,5 @@ declare namespace LX {
       id: string
       list: MusicInfoOnline[]
     }
-
   }
 }

@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create or update GitHub Release
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const tag = context.ref.replace('refs/tags/', '');
+            if (!/^v\d+\.\d+\.\d+$/.test(tag)) {
+              core.setFailed(`Invalid release tag format: ${tag}. Expected vMAJOR.MINOR.PATCH`);
+              return;
+            }
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            try {
+              const existing = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+              await github.rest.repos.updateRelease({
+                owner,
+                repo,
+                release_id: existing.data.id,
+                tag_name: tag,
+                name: tag,
+                generate_release_notes: true,
+              });
+              core.info(`Updated existing release for tag ${tag}`);
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.repos.createRelease({
+                owner,
+                repo,
+                tag_name: tag,
+                name: tag,
+                generate_release_notes: true,
+              });
+              core.info(`Created release for tag ${tag}`);
+            }

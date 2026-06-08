@@ -22,6 +22,7 @@ declare module 'aes-js' {
       decrypt(data: Uint8Array): Uint8Array
     }
   }
+
   export { ModeOfOperation }
 }
 
