@@ -9,12 +9,12 @@ class_name = "UserSyncDO"
 
 [[kv_namespaces]]
 binding = "KV"
-id = "KV_NAMESPACE_ID_PLACEHOLDER"
+id = "b27679d72a954502aa294721ccb2984b"
 
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["UserSyncDO"]
 
 [vars]
-LX_USERS = "LX_USERS_PLACEHOLDER"
+LX_USERS = '[{"name":"sunjian","password":"200174"},{"name":"suri","password":"200174"},{"name":"yanhui","password":"200174"},{"name":"andy","password":"200174"}]'
 SERVER_NAME = "LX Music Server"
