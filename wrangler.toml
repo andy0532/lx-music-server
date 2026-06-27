@@ -16,5 +16,5 @@ tag = "v1"
 new_sqlite_classes = ["UserSyncDO"]
 
 [vars]
-LX_USERS = '[{"name":"sunjian","password":"200174"},{"name":"suri","password":"200174"},{"name":"yanhui","password":"200174"},{"name":"andy","password":"200174"}]'
+LX_USERS = '[{"name":"sunjian","password":"200174"},{"name":"suri","password":"suri200174"},{"name":"yanhui","password":"yanhui200174"},{"name":"andy","password":"andy200174"}]'
 SERVER_NAME = "LX Music Server"
