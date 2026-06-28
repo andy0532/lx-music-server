@@ -57,6 +57,9 @@ async function main() {
   app.route('/', (await import('@/routes/auth')).default)
   app.route('/', (await import('@/routes/devices')).default)
 
+  // Debug: list all routes
+  console.log('Routes:', app.routes?.length || '?')
+
   const server = http.createServer()
 
   // HTTP handler
