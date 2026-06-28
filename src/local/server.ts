@@ -25,7 +25,7 @@ function getDO(userName: string): UserSyncDO {
     const state = new LocalDOState(userName)
     const doObj = new UserSyncDO(state as any, {
       KV: { get: (k: string) => kv.get(k), put: (k: string, v: string) => kv.put(k, v), delete: (k: string) => kv.delete(k) },
-      LX_USERS: CFG.users as any,
+      LX_USERS: JSON.stringify(CFG.users),
       SERVER_NAME: CFG.serverName,
       _wsPair: null as any,
     } as any)
@@ -41,7 +41,19 @@ function makeEnv(): LX.Env {
     KV: { get: (k: string) => kv.get(k), put: (k: string, v: string) => kv.put(k, v), delete: (k: string) => kv.delete(k) },
     USER_SYNC: {
       idFromName: (name: string) => ({ name } as any),
-      get: (id: any) => ({ fetch: (req: Request) => getDO(id.name).fetch(req) }),
+      get: (id: any) => ({ fetch: (req: any, init?: any) => {
+        let request: Request
+        if (typeof req === 'string' && init) {
+          request = new Request(req, init)
+        } else if (typeof req === 'string') {
+          request = new Request(req)
+        } else if (init) {
+          request = new Request(req, init)
+        } else {
+          request = req
+        }
+        return getDO(id.name).fetch(request)
+      } }),
     },
     LX_USERS: JSON.stringify(CFG.users),
     SERVER_NAME: CFG.serverName,
@@ -58,40 +70,59 @@ async function main() {
   app.route('/', (await import('@/routes/devices')).default)
 
   // Debug: list all routes
-  console.log('Routes:', app.routes?.length || '?')
+  console.log('Routes:', app.routes?.map((r: any) => `${r.method} ${r.path}`).join(', '))
 
   const server = http.createServer()
 
   // HTTP handler
-  server.on('request', (req, res) => {
-    app.fetch(req as any, makeEnv() as any, {} as any)
-      .then((r: Response) => {
-        const headers: Record<string, string> = {}
-        r.headers.forEach((v, k) => { headers[k] = v })
-        res.writeHead(r.status, headers)
-        if (r.body) {
-          const reader = (r.body as ReadableStream).getReader()
-          const pump = () => reader.read().then(({ done, value }: any) => {
-            if (done) return res.end()
-            res.write(Buffer.from(value))
-            pump()
-          })
+  server.on('request', async (req, res) => {
+    // Convert IncomingMessage to Request
+    const url = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`)
+    const body = req.method === 'GET' || req.method === 'HEAD' ? undefined : await new Promise<Buffer>((resolve) => {
+      const chunks: Buffer[] = []
+      req.on('data', (chunk: Buffer) => chunks.push(chunk))
+      req.on('end', () => resolve(Buffer.concat(chunks)))
+    })
+    const request = new Request(url.toString(), {
+      method: req.method,
+      headers: req.headers as Record<string, string>,
+      body,
+    })
+    console.log('Request:', req.method, url.pathname)
+    try {
+      const response = await app.fetch(request, makeEnv() as any, {} as any)
+      const headers: Record<string, string> = {}
+      response.headers.forEach((v, k) => { headers[k] = v })
+      res.writeHead(response.status, headers)
+      if (response.body) {
+        const reader = (response.body as ReadableStream).getReader()
+        const pump = () => reader.read().then(({ done, value }: any) => {
+          if (done) { res.end(); return }
+          res.write(Buffer.from(value))
           pump()
-        } else {
-          res.end()
-        }
-      })
-      .catch((e: Error) => { res.writeHead(500); res.end(String(e)) })
+        }).catch(() => res.end())
+        pump()
+      } else {
+        res.end()
+      }
+    } catch (e) {
+      console.error('Hono error:', e)
+      res.writeHead(500)
+      res.end('Internal Server Error')
+    }
   })
 
   // WebSocket handler — use background pair server
   const pairSrv = http.createServer()
   const pairWss = new WebSocketServer({ server: pairSrv })
-  pairSrv.listen(0, '127.0.0.1')
+  // Accept and discard pair connections (DO uses the WebSocket directly)
+  pairWss.on('connection', () => {})
+  let pairPort = 0
+  pairSrv.listen(0, '127.0.0.1', () => { pairPort = (pairSrv.address() as any).port })
 
   const clientWss = new WebSocketServer({ noServer: true })
 
-  server.on('upgrade', (req, socket, head) => {
+  server.on('upgrade', async (req, socket, head) => {
     const url = new URL(req.url || '', 'http://localhost')
     if (url.pathname !== '/socket') { socket.destroy(); return }
 
@@ -99,44 +130,51 @@ async function main() {
     const token = url.searchParams.get('t')
     if (!clientId || !token) { socket.destroy(); return }
 
-    kv.get(`client:${clientId}`).then(userName => {
+    try {
+      const userName = await kv.get(`client:${clientId}`)
       if (!userName) { socket.destroy(); return }
 
-      const doInstance = getDO(userName)
+      // Accept client WebSocket upgrade
+      clientWss.handleUpgrade(req, socket, head, (clientWs) => {
+        // Create pair: connect to our pair server
+        const doWs = new (require('ws').WebSocket)(`ws://127.0.0.1:${pairPort}`)
+        
+        doWs.on('open', () => {
+          ;(doWs as any).accept = () => {}
+          
+          // Call DO with _wsPair that returns both WebSockets
+          const doInstance = getDO(userName)
+          ;(doInstance as any).env._wsPair = () => [clientWs, doWs]
 
-      // Create a DO-side WebSocket via pair server
-      const doWsPromise = new Promise<import('ws').WebSocket>(resolve => {
-        pairWss.once('connection', ws => { (ws as any).accept = ()=>{}; resolve(ws) })
-      })
-
-      // Accept client WebSocket
-      clientWss.handleUpgrade(req, socket, head, clientWs => {
-        // Tell DO to use our pair
-        const pairAddr = pairSrv.address() as { port: number }
-        ;(doInstance as any).env._wsPair = () => {
-          const clientDoWs = new (require('ws').WebSocket)(`ws://127.0.0.1:${pairAddr.port}`)
-          return [clientDoWs, null] // [0]=client (sent to client), [1]=server (used by DO)
-        }
-
-        doInstance.fetch(new Request(
-          `https://do/ws?i=${encodeURIComponent(clientId)}&t=${encodeURIComponent(token)}`,
-          { headers: req.headers as any }
-        )).then(async () => {
-          const doWs = await doWsPromise
-          // Bridge: clientWs ↔ doWs
-          clientWs.on('message', d => doWs.readyState === 1 && doWs.send(d))
-          doWs.on('message', d => clientWs.readyState === 1 && clientWs.send(d))
-          clientWs.on('close', () => doWs.close())
-          doWs.on('close', () => clientWs.close())
-        }).catch((err: Error) => {
-          console.error('DO ws error:', err)
+          doInstance.fetch(new Request(
+            `https://do/ws?i=${encodeURIComponent(clientId)}&t=${encodeURIComponent(token)}`,
+            { headers: req.headers as any }
+          )).then(() => {
+            // The DO takes over WebSocket handling via its createSocket/sync
+          }).catch((err: Error) => {
+            console.error('DO ws error:', err.message)
+            clientWs.close()
+            doWs.close()
+          })
+        })
+        
+        doWs.on('error', (err: Error) => {
+          console.error('doWs error:', err.message)
           clientWs.close()
         })
+        
+        // Timeout if doWs doesn't open
+        setTimeout(() => {
+          if (doWs.readyState !== 1) {
+            clientWs.close()
+            doWs.close()
+          }
+        }, 10000)
       })
-    }).catch((err: Error) => {
+    } catch (err) {
       console.error('Upgrade error:', err)
       socket.destroy()
-    })
+    }
   })
 
   server.listen(CFG.port, '0.0.0.0', () => {
