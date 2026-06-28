@@ -15,6 +15,10 @@ export const sync = async (socket: LX.Socket) => {
   for (const moduleName of FeaturesList) {
     if (enabledFeatures[moduleName]) {
       socket.feature[moduleName] = enabledFeatures[moduleName]
+      // Always ask for sync mode (disable snapshot auto-merge)
+      if (moduleName === 'list' && socket.feature.list) {
+        socket.feature.list = { ...socket.feature.list, skipSnapshot: true }
+      }
       await modules[moduleName].sync(socket).catch((_) => _)
     }
     if (disconnected) throw new Error('disconnected')

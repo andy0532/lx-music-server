@@ -346,7 +346,14 @@ export class UserSyncDO implements DurableObject {
 
     this.startPingInterval()
 
-    return new Response(null, { status: 101, webSocket: client })
+    // Cloudflare Workers: status 101 + webSocket triggers upgrade
+    // Node.js: return webSocket as custom property, server handles upgrade
+    if (typeof WebSocketPair !== 'undefined') {
+      return new Response(null, { status: 101, webSocket: client })
+    }
+    const resp = new Response(null, { status: 200 })
+    ;(resp as any)._webSocket = client
+    return resp
   }
 
   private startPingInterval() {
@@ -424,14 +431,21 @@ export class UserSyncDO implements DurableObject {
       if (typeof event.data !== 'string') return
       void decryptMsg(keyInfo, event.data)
         .then((data) => {
+          console.log('DO msg decrypt: len=' + data.length + ' start=' + data.substring(0, 80))
           let parsed: any
           try {
             parsed = JSON.parse(data)
-          } catch {
+            } catch {
             ws.close(SYNC_CLOSE_CODE.failed)
             return
-          }
-          msg2call.message(parsed)
+            }
+            // Debug: log parsed message keys
+            if (typeof parsed === 'object' && parsed) {
+            console.log('msg2call msg: keys=' + Object.keys(parsed).join(',') + ' hasName=' + ('name' in parsed) + ' hasPath=' + ('path' in parsed))
+            } else {
+            console.log('msg2call msg: NOT_OBJECT type=' + typeof parsed)
+            }
+            msg2call.message(parsed)
         })
         .catch((err) => {
           console.error('decrypt error:', err)

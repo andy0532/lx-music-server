@@ -112,18 +112,14 @@ async function main() {
     }
   })
 
-  // WebSocket handler — use background pair server
-  const pairSrv = http.createServer()
-  const pairWss = new WebSocketServer({ server: pairSrv })
-  // Accept and discard pair connections (DO uses the WebSocket directly)
-  pairWss.on('connection', () => {})
-  let pairPort = 0
-  pairSrv.listen(0, '127.0.0.1', () => { pairPort = (pairSrv.address() as any).port })
+  // WebSocket handler — bridge client WebSocket to DO with EventEmitter
+  const EventEmitter = (require('events')).EventEmitter
 
   const clientWss = new WebSocketServer({ noServer: true })
 
   server.on('upgrade', async (req, socket, head) => {
     const url = new URL(req.url || '', 'http://localhost')
+    console.log('WS UPGRADE:', url.pathname, url.search)
     if (url.pathname !== '/socket') { socket.destroy(); return }
 
     const clientId = url.searchParams.get('i')
@@ -136,40 +132,49 @@ async function main() {
 
       // Accept client WebSocket upgrade
       clientWss.handleUpgrade(req, socket, head, (clientWs) => {
-        // Create pair: connect to our pair server
-        const doWs = new (require('ws').WebSocket)(`ws://127.0.0.1:${pairPort}`)
-        
-        doWs.on('open', () => {
-          ;(doWs as any).accept = () => {}
-          
-          // Call DO with _wsPair that returns both WebSockets
-          const doInstance = getDO(userName)
-          ;(doInstance as any).env._wsPair = () => [clientWs, doWs]
+        // Create a fake DO-side WebSocket that mirrors clientWs
+        const doWs = new EventEmitter() as any
+        doWs.readyState = 1
+        doWs.accept = () => {}
+        doWs.send = (data: any) => {
+          if (clientWs.readyState === 1) {
+            console.log('doWs.send, data length:', typeof data === 'string' ? data.length : 'non-string')
+            clientWs.send(data)
+          }
+        }
+        doWs.close = (code?: number) => {
+          console.log('doWs.close, code:', code)
+          clientWs.close(code)
+        }
+        doWs.addEventListener = (event: string, handler: any) => {
+          if (event === 'message') {
+            clientWs.on('message', (data: any) => {
+              const msg = typeof data === 'string' ? data : Buffer.isBuffer(data) ? data.toString() : String(data)
+              if (msg.substring(0,3) === 'cg_') {
+                console.log('clientWs gzip: len=' + msg.length + ' base64=' + msg.substring(3, 33))
+              } else {
+                console.log('clientWs json: len=' + msg.length + ' preview=' + msg.substring(0, 80))
+              }
+              handler({ data: msg })
+            })
+          } else if (event === 'close') {
+            clientWs.on('close', () => handler({}))
+          } else if (event === 'error') {
+            clientWs.on('error', (err: any) => handler(err))
+          }
+        }
 
-          doInstance.fetch(new Request(
-            `https://do/ws?i=${encodeURIComponent(clientId)}&t=${encodeURIComponent(token)}`,
-            { headers: req.headers as any }
-          )).then(() => {
-            // The DO takes over WebSocket handling via its createSocket/sync
-          }).catch((err: Error) => {
-            console.error('DO ws error:', err.message)
-            clientWs.close()
-            doWs.close()
-          })
-        })
-        
-        doWs.on('error', (err: Error) => {
-          console.error('doWs error:', err.message)
+        // Pass the pair to DO
+        const doInstance = getDO(userName)
+        ;(doInstance as any).env._wsPair = () => [clientWs, doWs]
+
+        doInstance.fetch(new Request(
+          `https://do/ws?i=${encodeURIComponent(clientId)}&t=${encodeURIComponent(token)}`,
+          { headers: req.headers as any }
+        )).catch((err: Error) => {
+          console.error('DO ws error:', err.message)
           clientWs.close()
         })
-        
-        // Timeout if doWs doesn't open
-        setTimeout(() => {
-          if (doWs.readyState !== 1) {
-            clientWs.close()
-            doWs.close()
-          }
-        }, 10000)
       })
     } catch (err) {
       console.error('Upgrade error:', err)

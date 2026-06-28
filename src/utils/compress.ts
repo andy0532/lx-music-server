@@ -1,3 +1,5 @@
+import * as zlib from 'zlib'
+
 const streamToBytes = async (
   readable: ReadableStream<Uint8Array>,
 ): Promise<Uint8Array> => {
@@ -28,23 +30,22 @@ const bytesToBase64 = (bytes: Uint8Array): string => {
 }
 
 const gzip = async (data: string): Promise<string> => {
-  const bytes = new TextEncoder().encode(data)
-  const stream = new CompressionStream('gzip')
-  const writer = stream.writable.getWriter()
-  await writer.write(bytes)
-  await writer.close()
-  const result = await streamToBytes(stream.readable)
-  return bytesToBase64(result)
+  return new Promise((resolve, reject) => {
+    zlib.gzip(data, (err, result) => {
+      if (err) reject(err)
+      else resolve(btoa(String.fromCharCode(...new Uint8Array(result))))
+    })
+  })
 }
 
 const unGzip = async (data: string): Promise<string> => {
   const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0))
-  const stream = new DecompressionStream('gzip')
-  const writer = stream.writable.getWriter()
-  await writer.write(bytes)
-  await writer.close()
-  const result = await streamToBytes(stream.readable)
-  return new TextDecoder().decode(result)
+  return new Promise((resolve, reject) => {
+    zlib.gunzip(Buffer.from(bytes), (err, result) => {
+      if (err) reject(err)
+      else resolve(result.toString('utf-8'))
+    })
+  })
 }
 
 // Note: messages are gzip-compressed only; per-device AES encryption is not yet implemented

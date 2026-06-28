@@ -541,10 +541,16 @@ export const sync = async (socket: LX.Socket) => {
   }
 
   syncRef.current = socket.keyInfo.clientId
+  console.log('list_sync: start')
   await syncList(socket)
     .then(async () => {
+      console.log('list_sync: done, finished')
       await finishedSync(socket)
       socket.moduleReadys.list = true
+      console.log('list_sync: complete')
+    })
+    .catch((err: any) => {
+      console.log('list_sync: err:', err?.message)
     })
     .finally(() => {
       syncRef.current = null
