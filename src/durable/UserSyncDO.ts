@@ -318,7 +318,8 @@ export class UserSyncDO implements DurableObject {
     keyInfo.lastConnectDate = Date.now()
     await this.userSpace.dataManage.saveClientKeyInfo(keyInfo)
 
-    const [client, server] = Object.values(new WebSocketPair())
+    const wsPair = (this.env as any)._wsPair ? (this.env as any)._wsPair() : new WebSocketPair()
+    const [client, server] = Object.values(wsPair)
     server.accept()
 
     const socket = this.createSocket(server, keyInfo, user)
